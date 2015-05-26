@@ -1,0 +1,966 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <GL/glut.h>
+
+#define WHITE 1
+#define RED 2 
+#define GREEN 3
+#define BLUE 4
+#define YELLOW 5
+#define ORANGE 6
+#define PURPLE 7
+#define SKYBLUE 8
+
+#define POINT 1
+#define LINE 2
+#define POLYGON 3
+#define CIRCLE 4
+#define CURVE 5
+#define HEXAGON 6
+#define SQUARE 7
+#define TRIANGLE 8
+#define RECTANGLE 9
+#define DRAGCIRCLE 10
+#define DRAGHEXAGON 11
+#define DRAGSQUARE 12
+#define DRAGTRIANGLE 13
+#define DRAGRECTANGLE 14
+
+#define SOLID 0xFFFF
+#define DOT 0xAAAA
+#define SDOT 0x1111
+#define DASH 0xEEEE
+#define LDASH 0x0C0F
+
+#define NOTFILL 1
+#define FILL 2
+
+#define QUIT 1
+#define CLEAR 2
+#define SAVE 3
+#define BLEND 4
+#define LOAD 5
+
+const GLfloat R = 0.5f;  
+
+int width = 800,height = 600;
+typedef int menu_t;
+menu_t set_color,draw_type,draw_size,file_func,fill_type,stipple_type,fill_type2,function_menu,dragcircletype,draghexagontype,dragsquaretype,dragtriangletype,dragrectangletype;
+
+float      colors[3] = {0.0,0.0,0.0};
+int        pos_x=-1, pos_y=-1;
+int        pos_x2=-1, pos_y2=-1;
+float      size=18.0;
+int        fill = 1; 
+int        stipple = 0;
+int        obj_type = -1;
+int        first=0;
+int        vertex[128][2];
+int        side=0; 
+float        firstxy[2];
+int        left_button_state = 2;
+int        Motion = 0;
+int        Position = 0;
+unsigned char  image[1024*800][4];
+
+const int font=(int)GLUT_BITMAP_9_BY_15;
+char s[30];
+char *String;
+char *c;
+
+void renderBitmapString(float x, float y, void *font,const char *string){
+    const char *c;
+    glRasterPos2f(x, y);
+    for (c=string; *c != '\0'; c++) {
+        glutBitmapCharacter(font, *c);
+    }
+} 
+
+void display(void)
+{
+  glClear(GL_COLOR_BUFFER_BIT);
+  glColor3d(1.0, 0.0, 0.0);
+  glPushMatrix();
+  glLoadIdentity();
+  renderBitmapString(0,580,(void *)font,"Computer Graphics - HW1");
+  renderBitmapString(0,560,(void *)font,"Keyboard:Q - Quit");
+  glPopMatrix();
+  glutSwapBuffers();
+  glFlush();
+}
+
+void reshape(int new_width,int new_height)
+{
+  height = new_height;
+  width = new_width;
+
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  gluOrtho2D(0.0, (double) width, 0.0, (double) height);
+  glViewport(0,0,width,height);
+  glMatrixMode(GL_MODELVIEW);
+  glutPostRedisplay();
+}
+
+void specialkey(int key, int x, int y)
+{
+	switch(key){
+	case GLUT_KEY_LEFT:
+		fprintf(stderr,"move left\n");
+		break;
+	case GLUT_KEY_RIGHT:
+		fprintf(stderr,"move right\n");
+		break;
+	case GLUT_KEY_UP:
+		fprintf(stderr,"move up\n");
+		break;
+	case GLUT_KEY_DOWN:
+		fprintf(stderr,"move down\n");
+		break;
+	default:
+		break;
+	}
+}
+
+void keyboard(unsigned char key,int x,int y)
+{
+	fprintf(stderr,"%c key is pressed, cursor is at <%d,%d>\n", key, x, y);
+
+	if(key == 'Q' || key == 'q') exit(0);
+	
+	if(pos_x<=0||pos_y<=0){ pos_x = x;  pos_y = y;}
+	glRasterPos2i(pos_x, height - pos_y);
+	glutBitmapCharacter(GLUT_BITMAP_8_BY_13, (int) key);
+	pos_x += 10;
+    glFinish();
+	
+}
+
+void Stipple(int stipple)
+{
+	if(stipple == 1)
+	{
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(1, SOLID);
+	}else if(stipple == 2)
+	{
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(1, DOT);
+	}else if(stipple == 3)
+	{
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(1, SDOT);
+	}else if(stipple == 4)
+	{
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(1, DASH);
+	}else if(stipple == 5)
+	{
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(1, LDASH);
+	}
+}
+
+void draw_polygon()
+{
+  int  i;
+
+  Stipple(stipple);
+  glLineWidth(1.0);
+
+  glBegin(GL_POLYGON);
+    for(i=0;i<side;i++)
+      glVertex2f(vertex[i][0], height-vertex[i][1]);
+  glEnd();
+  glFinish();
+  side = 0;    /* set side=0 for next polygon */
+}
+
+/*------------------------------------------------------------
+ * Procedure to draw a circle
+ */
+void draw_circle(float x,float y,float radius,int fill,int stipple)
+{
+	int count;
+    int sections=200;                      
+    GLfloat TWOPI=2.0f * 3.14159f;
+
+	Stipple(stipple);
+	glLineWidth(1.0);
+
+	if(fill == 1)
+	{
+		glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+		glBegin(GL_LINE_LOOP);
+	}else if(fill == 2){
+		glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+		glBegin(GL_POLYGON);
+	}
+	for(count=0; count<=sections; count++)
+	{
+		glVertex2f(x+radius*cos(count*TWOPI/sections), y+radius*sin(count*TWOPI/sections));
+	}
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+	glFlush();
+}
+
+void draw_hexagon(float x,float y,float radius,int fill,int stipple)
+{
+	 const GLfloat pi=3.14159;
+
+	 //初始放置角度
+	 float rotAngle=0;
+	 float p1[]={x+radius*cos(rotAngle),y+radius*sin(rotAngle)};
+	 float p2[]={x+radius*cos(rotAngle+pi/3),y+radius*sin(rotAngle+pi/3)};
+	 float p3[]={x+radius*cos(rotAngle+2*pi/3),y+radius*sin(rotAngle+2*pi/3)};
+	 float p4[]={x+radius*cos(rotAngle+pi),y+radius*sin(rotAngle+pi)};
+	 float p5[]={x+radius*cos(rotAngle+4*pi/3),y+radius*sin(rotAngle+4*pi/3)};
+	 float p6[]={x+radius*cos(rotAngle+5*pi/3),y+radius*sin(rotAngle+5*pi/3)}; 
+	 
+	 Stipple(stipple);
+	 glLineWidth(1.0);
+
+	 if(fill == 1)
+	 {
+		 glBegin(GL_LINE_LOOP);
+	 }else if(fill == 2)
+	 {
+		 glBegin(GL_TRIANGLE_FAN);
+	 }
+	 glVertex2fv(p1);
+	 glVertex2fv(p2);
+	 glVertex2fv(p3);
+	 glVertex2fv(p4);
+	 glVertex2fv(p5);
+	 glVertex2fv(p6);
+	 glEnd();
+	 glDisable(GL_LINE_STIPPLE);
+}
+
+void draw_square(float x,float y,float radius,int fill,int stipple)
+{
+	const GLfloat pi=3.14159;
+	//初始放置角度
+	float p1[]={x+radius,y+radius};
+	float p2[]={x-radius,y+radius};
+	float p3[]={x-radius,y-radius};
+	float p4[]={x+radius,y-radius};
+
+	Stipple(stipple);	
+	glLineWidth(1.0);
+
+	if(fill == 1)
+	{
+		glBegin(GL_LINE_LOOP);
+	}else if(fill == 2)
+	{
+		glBegin(GL_TRIANGLE_FAN);
+	}	
+	glVertex2fv(p1);
+	glVertex2fv(p2);
+	glVertex2fv(p3);
+	glVertex2fv(p4);
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+}
+
+void draw_triangle(float x,float y,float radius,int fill,int stipple)
+{
+	const GLfloat pi=3.14159;
+	//初始放置角度
+	float rotAngle=0;
+	float p1[]={x,y+radius};
+	float p2[]={x-radius,y-radius};
+	float p3[]={x+radius,y-radius}; 
+
+	Stipple(stipple);	
+	glLineWidth(1.0);
+
+	if(fill == 1)
+	{
+		glBegin(GL_LINE_LOOP);
+	}else if(fill == 2)
+	{
+		glBegin(GL_TRIANGLES);
+	}
+	glVertex2fv(p1);
+	glVertex2fv(p2);
+	glVertex2fv(p3);
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+}
+
+void draw_rectangle(float x,float y,float radius,int fill,int stipple)
+{
+	const GLfloat pi=3.14159;
+	//初始放置角度
+	float p1[]={x+(radius*2),y+radius};
+	float p2[]={x-(radius*2),y+radius};
+	float p3[]={x-(radius*2),y-radius};
+	float p4[]={x+(radius*2),y-radius};
+
+	Stipple(stipple);
+	glLineWidth(1.0);
+
+	if(fill == 1)
+	{
+		glBegin(GL_LINE_LOOP);
+	}else if(fill == 2)
+	{
+		glBegin(GL_TRIANGLE_FAN);
+	}		
+	glVertex2fv(p1);
+	glVertex2fv(p2);
+	glVertex2fv(p3);
+	glVertex2fv(p4);
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+}
+
+void draw_line(float x,float y,float radius)
+{	
+	glLineWidth(radius-16.0);
+	Stipple(stipple);
+
+	if(Motion == 1)
+	{
+		glBegin(GL_LINES);
+		glVertex2f(x, y);
+		glVertex2f(pos_x2,600-pos_y2);
+		glEnd();
+		glDisable(GL_LINE_STIPPLE);	
+	}
+	pos_x2 = pos_x;
+	pos_y2 = pos_y;
+
+	glBegin(GL_LINES);
+	glVertex2f(x, y);
+	glVertex2f(pos_x,600-pos_y);
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);	
+}
+
+void mouse(int button,int state,int x,int y)
+{
+	String = (char*)malloc(sizeof(char));
+	c = (char*)malloc(sizeof(char));
+  switch(button){
+  case GLUT_LEFT_BUTTON:
+	  first = 0;
+	  Motion = 0;
+    if(state==GLUT_UP){  
+		fprintf(stderr,"left button up\n");
+		switch(obj_type){
+		case POINT:
+			glPointSize(size-16.0);     /*  Define point size */
+			glBegin(GL_POINTS);     /*  Draw a point */
+			glVertex2f(x, height-y);
+			glEnd();
+			break;
+		case POLYGON:  /* Define vertices of poly */
+			if(side==0){
+				vertex[side][0] = x; vertex[side][1] = y;
+				side ++;
+			}else{
+				if(fabs((float)vertex[side-1][0]-x) + fabs((float)vertex[side-1][1]-y)<2)
+					draw_polygon();
+				else{
+					Stipple(stipple);
+					glBegin(GL_LINES);
+					glVertex2f(vertex[side-1][0], height-vertex[side-1][1]);
+					glVertex2f(x, height-y);
+					glEnd();
+					vertex[side][0] = x; 
+					vertex[side][1] = y;
+					side ++;
+				}
+			}
+			break;
+		case CIRCLE:
+		   if(Motion == 1)
+			{
+				draw_circle(x,600-y,sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+			}else{
+				if(fill == 1)
+					draw_circle(x,600-y,size,fill,stipple);
+				else if(fill == 2)
+					draw_circle(x,600-y,size,fill,stipple); 
+			}
+			break;
+		case HEXAGON:
+			if(fill == 1)
+				draw_hexagon(x,600-y,size,fill,stipple);
+			else if(fill == 2)
+				draw_hexagon(x,600-y,size,fill,stipple);
+			break;
+		case SQUARE:
+			if(fill == 1)
+				draw_square(x,600-y,size,fill,stipple);
+			else if(fill == 2)
+				draw_square(x,600-y,size,fill,stipple);
+			break;
+		case TRIANGLE:
+			if(fill == 1)
+				draw_triangle(x,600-y,size,fill,stipple);
+			else if(fill == 2)
+				draw_triangle(x,600-y,size,fill,stipple);
+			break;
+		case RECTANGLE:
+			if(fill == 1)
+				draw_rectangle(x,600-y,size,fill,stipple);
+			else if(fill == 2)
+				draw_rectangle(x,600-y,size,fill,stipple);
+			break;
+		default:
+			break;
+		}
+	}else if(state==GLUT_DOWN)
+	{
+		fprintf(stderr,"left button is pressed, cursor is at <%d,%d>\n", x, y);
+
+		glEnable(GL_COLOR_LOGIC_OP);
+		glLogicOp(GL_XOR);
+
+		if(Position == 1)
+		{
+			glBegin(GL_LINES);
+			glVertex2f(pos_x, 0);
+			glVertex2f(pos_x,600);
+			glEnd();
+
+			glBegin(GL_LINES);
+			glVertex2f(0, 600-pos_y);
+			glVertex2f(800, 600-pos_y);
+			glEnd();
+
+			itoa(pos_x, String , 10);
+			glRasterPos2f(pos_x, 610-pos_y);
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, '(');
+			for (c=String; *c != '\0'; c++) 
+			{
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}
+			itoa(pos_y, String , 10); 
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ',');
+			glRasterPos2f(pos_x + 45, 610-pos_y);
+			for (c=String; *c != '\0'; c++) 
+			{
+				glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ')');
+			Position = 0;
+		}
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}
+    break;
+  case GLUT_MIDDLE_BUTTON:
+    if(state==GLUT_DOWN) 
+	{
+		fprintf(stderr,"middle button is acting\n");
+		
+		glEnable(GL_COLOR_LOGIC_OP);
+		glLogicOp(GL_XOR);
+
+		if(Position == 1)
+		{
+			glBegin(GL_LINES);
+			glVertex2f(pos_x, 0);
+			glVertex2f(pos_x,600);
+			glEnd();
+
+			glBegin(GL_LINES);
+			glVertex2f(0, 600-pos_y);
+			glVertex2f(800, 600-pos_y);
+			glEnd();
+
+			itoa(pos_x, String , 10); 
+			glRasterPos2f(pos_x, 610-pos_y);
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, '(');
+			for (c=String; *c != '\0'; c++) 
+			{
+				glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}
+			
+			itoa(pos_y, String , 10); 
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ',');
+			glRasterPos2f(pos_x + 45, 610-pos_y);
+			for (c=String; *c != '\0'; c++) 
+			{
+				glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ')');
+			Position = 0;
+		}
+		if(pos_x == x && pos_y == y)
+		{
+		}else
+		{
+			glBegin(GL_LINES);
+			glVertex2f(x, 0);
+			glVertex2f(x,600);
+			glEnd();
+
+			glBegin(GL_LINES);
+			glVertex2f(0, 600-y);
+			glVertex2f(800, 600-y);
+			glEnd();
+
+			itoa(x, String , 10);
+			glRasterPos2f(x, 610-y);
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, '(');
+			for (c=String; *c != '\0'; c++) 
+			{
+				glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}
+			itoa(y, String , 10);
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ',');
+			glRasterPos2f(x + 45, 610-y);
+			for (c=String; *c != '\0'; c++) 
+			{
+				glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+			}	
+			glutBitmapCharacter(GLUT_BITMAP_9_BY_15, ')');
+			Position = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}
+    break;
+  case GLUT_RIGHT_BUTTON:
+    if(state==GLUT_UP) fprintf(stderr,"right button is up\n");
+    else exit(0);
+    break;
+  default:
+    break;
+  }
+  
+  glFinish();
+}
+
+void motion(int x,int y)
+{
+	glEnable(GL_COLOR_LOGIC_OP);
+	glLogicOp(GL_XOR);
+
+	if(obj_type == CURVE)
+	{
+		if(first==0)
+		{
+			first = 1;
+			pos_x = x; 
+			pos_y = y;
+		}else{
+			glBegin(GL_LINES);
+			glVertex3f(pos_x, height-pos_y, 0.0);
+			glVertex3f(x, height - y, 0.0);
+			glEnd();
+			pos_x = x; pos_y = y;
+		}	
+		glFinish();
+	}else if(obj_type == DRAGCIRCLE)
+	{
+		
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+			if(Motion == 1)
+			{
+				draw_circle(firstxy[0],600-firstxy[1],sqrt((pos_x-firstxy[0])*(pos_x-firstxy[0])+(pos_y-firstxy[1])*(pos_y-firstxy[1])),fill,stipple);
+			}
+				draw_circle(firstxy[0],600-firstxy[1],sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else if(obj_type == DRAGHEXAGON)
+	{
+		
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+			if(Motion == 1)
+			{
+				draw_hexagon(firstxy[0],600-firstxy[1],sqrt((pos_x-firstxy[0])*(pos_x-firstxy[0])+(pos_y-firstxy[1])*(pos_y-firstxy[1])),fill,stipple);
+			}
+				draw_hexagon(firstxy[0],600-firstxy[1],sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else if(obj_type == DRAGSQUARE)
+	{
+		
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+			if(Motion == 1)
+			{
+				draw_square(firstxy[0],600-firstxy[1],sqrt((pos_x-firstxy[0])*(pos_x-firstxy[0])+(pos_y-firstxy[1])*(pos_y-firstxy[1])),fill,stipple);
+			}
+				draw_square(firstxy[0],600-firstxy[1],sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else if(obj_type == DRAGTRIANGLE)
+	{
+		
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+			if(Motion == 1)
+			{
+				draw_triangle(firstxy[0],600-firstxy[1],sqrt((pos_x-firstxy[0])*(pos_x-firstxy[0])+(pos_y-firstxy[1])*(pos_y-firstxy[1])),fill,stipple);
+			}
+				draw_triangle(firstxy[0],600-firstxy[1],sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else if(obj_type == DRAGRECTANGLE)
+	{
+		
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+			if(Motion == 1)
+			{
+				draw_rectangle(firstxy[0],600-firstxy[1],sqrt((pos_x-firstxy[0])*(pos_x-firstxy[0])+(pos_y-firstxy[1])*(pos_y-firstxy[1])),fill,stipple);
+			}
+				draw_rectangle(firstxy[0],600-firstxy[1],sqrt((x-firstxy[0])*(x-firstxy[0])+(y-firstxy[1])*(y-firstxy[1])),fill,stipple);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else if(obj_type == LINE)
+	{
+		if(first==0)
+		{
+			first = 1;
+			firstxy[0] = x; 
+			firstxy[1] = y;
+		}else{
+				draw_line(firstxy[0],600-firstxy[1],size);
+				Motion = 1;
+		}
+		pos_x = x;
+		pos_y = y;
+		glFlush();
+		glDisable(GL_COLOR_LOGIC_OP);
+	}else{
+		return;
+	}
+
+}
+
+void functionmenu(int value)
+{
+}
+
+void color(int value)
+{
+	switch(value)
+	{
+	case WHITE:
+		colors[0] = colors[1] = colors[2] = 1.0;
+		break;
+	case RED:
+		colors[0] = 1.0;
+		colors[1] = colors[2] = 0.0;
+		break;
+	case GREEN:
+		colors[1] = 1.0;
+		colors[0] = colors[2] = 0.0;
+		break;
+	case BLUE:
+		colors[2] = 1.0;
+		colors[0] = colors[1] = 0.0;
+		break;
+	case YELLOW:
+		colors[2] = 0.0;
+		colors[0] = colors[1] = 1.0;
+		break;
+	case ORANGE:
+		colors[0] = 1.0;
+		colors[1] = 0.38;
+		colors[2] = 0.0;
+		break;
+	case PURPLE:
+		colors[0] = 0.628;
+		colors[1] = 0.13;
+		colors[2] = 0.94;
+		break;
+	case SKYBLUE:
+		colors[0] = 0.53;
+		colors[1] = 0.81;
+		colors[2] = 0.92;
+		break;
+	default:
+		break;
+	}
+	glColor3f(colors[0],colors[1],colors[2]);
+}
+
+void drawtype(int value)
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==CIRCLE)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+
+void drawsize(int value)
+{
+	if(value == 1){
+		size = 12.0;
+	}else if(value == 2){
+		size = 16.0;
+	}else if(value == 3){
+		size = 20.0;
+	}else if(value == 4){
+		size = 24.0;
+	}else if(value == 5){
+		size = 28.0;
+	}
+}
+
+void windowclear(void)
+{
+  /*Do nothing else but clear window to black*/
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  gluOrtho2D(0.0, (double) width, 0.0, (double) height);
+  glViewport(0,0,width, height);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glClear(GL_COLOR_BUFFER_BIT);
+  display();
+  glFlush();
+}
+
+void filefunc(int value)
+{
+	int i, j;
+	
+	if(value== QUIT) exit(0);
+	else if(value== CLEAR) windowclear();
+	else if(value== SAVE){ /* Save current window */
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, image);
+		for(i=0;i<width;i++)   /* Assign 0 opacity to black pixels */
+			for(j=0;j<height;j++)
+				if(image[i*width+j][0]==0 && image[i*width+j][1]==0 && image[i*width+j][2]==0) 
+					image[i*width+j][3] = 0;
+				else image[i*width+j][3] = 127; /* Other pixels have A=127*/
+	}else if(value== LOAD){ /* Restore the saved image */
+		glRasterPos2i(0, 0);
+		glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, image);
+  }else if(value== BLEND){ /* Blending current image with the saved image */	
+	  glEnable(GL_BLEND); 
+	  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glRasterPos2i(0, 0);
+      glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, image);
+	  glDisable(GL_BLEND);
+  }
+	glFlush();
+}
+
+void filltype(int value)
+{
+	if(value == 1)
+	{
+		fill = 1;
+	}else if(value == 2)
+	{
+		fill = 2;
+	}
+}
+
+void stippletype(int value)
+{
+	if(value == 1)
+	{
+		stipple = 1;
+	}else if(value ==2)
+	{
+		stipple = 2;
+	}else if(value == 3)
+	{
+		stipple = 3;
+	}else if(value == 4)
+	{
+		stipple = 4;
+	}else if(value == 5)
+	{
+		stipple = 5;
+	}
+}
+void dragcircle_type(int value)
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==DRAGCIRCLE)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+void draghexagon_type(int value)
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==DRAGHEXAGON)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+void dragsquare_type(int value)
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==DRAGSQUARE)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+void dragtriangle_type(int value)
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==DRAGTRIANGLE)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+void dragrectangle_type(int value)  
+{
+	obj_type = value;
+	if(value==LINE||value==CURVE||value==DRAGRECTANGLE)
+		first = 0;
+	else if(value==POLYGON) 
+		side = 0;
+}
+void menu()
+{
+	dragcircletype = glutCreateMenu(dragcircle_type);
+	glutAddMenuEntry("Circle", CIRCLE);
+	glutAddMenuEntry("Drag circle",DRAGCIRCLE);
+	draghexagontype = glutCreateMenu(draghexagon_type);
+	glutAddMenuEntry("Hexagon", HEXAGON);
+	glutAddMenuEntry("Drag hexgon",DRAGHEXAGON);
+	dragsquaretype = glutCreateMenu(dragsquare_type);
+	glutAddMenuEntry("Square", SQUARE);
+	glutAddMenuEntry("Drag square",DRAGSQUARE);
+	dragtriangletype = glutCreateMenu(dragtriangle_type);
+	glutAddMenuEntry("Triangle", TRIANGLE);
+	glutAddMenuEntry("Drag triangle",DRAGTRIANGLE);
+	dragrectangletype = glutCreateMenu(dragrectangle_type);
+	glutAddMenuEntry("Rectangle", RECTANGLE);
+	glutAddMenuEntry("Drag rectangle",DRAGRECTANGLE);
+
+	set_color = glutCreateMenu(color);
+	glutAddMenuEntry("White", WHITE);
+	glutAddMenuEntry("Red", RED);
+	glutAddMenuEntry("Green", GREEN);
+	glutAddMenuEntry("Blue", BLUE);
+	glutAddMenuEntry("Yellow", YELLOW);
+	glutAddMenuEntry("Orange", ORANGE);
+	glutAddMenuEntry("Purple", PURPLE);
+	glutAddMenuEntry("Sky blue", SKYBLUE);
+
+	draw_type = glutCreateMenu(drawtype);   /* Create draw-type menu */
+	glutAddMenuEntry("Point", POINT);
+	glutAddMenuEntry("Line", LINE);
+	glutAddMenuEntry("Poly", POLYGON);
+	glutAddMenuEntry("Curve", CURVE);
+	glutAddSubMenu("Circle", dragcircletype);
+	glutAddSubMenu("Hexagon",draghexagontype);
+	glutAddSubMenu("Square",dragsquaretype);
+	glutAddSubMenu("Triangle",dragtriangletype);
+	glutAddSubMenu("Rectangle",dragrectangletype);
+
+
+	draw_size= glutCreateMenu(drawsize);
+    glutAddMenuEntry("1 (Thin)",1); 
+	glutAddMenuEntry("2",2);
+	glutAddMenuEntry("3",3);
+	glutAddMenuEntry("4",4);
+	glutAddMenuEntry("5 (Thick)",5);
+
+	file_func = glutCreateMenu(filefunc);   /* Create another menu, file-menu */
+    glutAddMenuEntry("Save", SAVE);
+    glutAddMenuEntry("Load", LOAD);
+    glutAddMenuEntry("Blend", BLEND);
+    glutAddMenuEntry("Clear", CLEAR);
+    glutAddMenuEntry("Quit", QUIT);
+
+	fill_type = glutCreateMenu(filltype);
+	glutAddMenuEntry("Not Fill", NOTFILL);
+    glutAddMenuEntry("Fill", FILL);
+
+	stipple_type = glutCreateMenu(stippletype);
+	glutAddMenuEntry("Solid", 1);
+	glutAddMenuEntry("Dot", 2);
+	glutAddMenuEntry("Small Dot",3);
+	glutAddMenuEntry("Dash",4);
+	glutAddMenuEntry("Long Dash",5);
+
+	function_menu = glutCreateMenu(functionmenu);
+	glutAddSubMenu("File",file_func);
+	glutAddSubMenu("Colors",set_color);
+	glutAddSubMenu("Drawtype",draw_type);
+	glutAddSubMenu("Drawsize",draw_size);
+	glutAddSubMenu("Stipple style",stipple_type);
+	glutAddSubMenu("Fill",fill_type);
+}
+void main(int argc, char **argv)
+{
+	glutInit(&argc, argv);
+	glutInitWindowSize(640, 480);
+	glutInitWindowPosition(0,0);
+	glutInitWindowSize(width, height);
+	glutInitDisplayMode(GLUT_SINGLE|GLUT_RGBA);
+	glutCreateWindow("Homework1");
+	
+	/*Menu*/
+	menu();
+
+	/*Function*/
+	glutDisplayFunc(display);
+	glutReshapeFunc(reshape);
+	glutKeyboardFunc(keyboard);
+	glutSpecialFunc(specialkey);
+	glutMotionFunc(motion);
+	glutMouseFunc(mouse);
+	
+
+	glutAttachMenu(GLUT_RIGHT_BUTTON);  
+
+	glutMainLoop();
+}
